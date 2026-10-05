@@ -1,0 +1,15 @@
+{
+  "name": "hot100-judge-safe",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Hot100 interview practice with a static safe-web mode and a private full judge mode.",
+  "scripts": {
+    "start": "node scripts/safe-start.js",
+    "stop": "node scripts/stop-server.js",
+    "dev": "node server.js",
+    "test": "node scripts/test-judge.js",
+    "verify": "node scripts/verify-parts.js all"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
