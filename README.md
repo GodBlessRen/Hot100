@@ -1,4 +1,4 @@
-# Hot100 Judge Safe
+# Hot100
 
 LeetCode Hot 100 刷题台：**GitHub Pages 安全网页版 + Private Codespaces 完整 Judge**。
 
