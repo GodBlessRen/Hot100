@@ -1,4 +1,4 @@
-# 🔥 Hot100 Judge Safe
+# Hot100 Judge Safe
 
 LeetCode Hot 100 刷题台：**GitHub Pages 安全网页版 + Private Codespaces 完整 Judge**。
 
@@ -74,7 +74,3 @@ Full Judge 会编译/执行代码，因此不是面向陌生用户的 hardened m
 - Codespaces 启动器清洗环境
 
 详见 [SECURITY.md](SECURITY.md)。
-
-## Upstream
-
-基于 [Hubert-hwk/hot100-judge](https://github.com/Hubert-hwk/hot100-judge) 改造，遵循 MIT License。
