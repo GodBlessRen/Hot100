@@ -9,7 +9,7 @@
     serverHost ? 'server' : 'browser';
 
   const RUN_TIMEOUT = 4500;
-  const READY_TIMEOUT = 60000;
+  const READY_TIMEOUT = 90000;
 
   function normalize(text) {
     return String(text || '').replace(/\r\n/g, '\n').trimEnd();
@@ -29,25 +29,65 @@
     });
   }
 
+  function runtimeFailure(error) {
+    const message = error && error.message ? error.message : String(error || '未知错误');
+    return {
+      ok: false,
+      phase: 'runtime',
+      stdout: '',
+      stderr: message,
+      error: message,
+    };
+  }
+
   class PythonWorker {
-    constructor() { this.spawn(); }
+    constructor() {
+      this.generation = 0;
+      this.spawn();
+    }
 
     spawn() {
+      this.generation += 1;
+      const generation = this.generation;
       if (this.worker) this.worker.terminate();
+
+      for (const task of (this.pending || new Map()).values()) {
+        clearTimeout(task.timer);
+        task.resolve(runtimeFailure(new Error('Python Worker 已重启，请重新运行')));
+      }
       this.pending = new Map();
-      this.worker = new Worker(new URL('./pyodide-worker.mjs', document.baseURI), { type: 'module' });
+
+      const workerUrl = new URL('./pyodide-worker.js', document.baseURI);
+      this.worker = new Worker(workerUrl, { type: 'module', name: 'hot100-python' });
+
       this.ready = new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('Python WebAssembly 运行时加载超时')), READY_TIMEOUT);
+        let settled = false;
+        const finishReject = (error) => {
+          if (settled || generation !== this.generation) return;
+          settled = true;
+          clearTimeout(timer);
+          reject(error);
+        };
+        const finishResolve = () => {
+          if (settled || generation !== this.generation) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve();
+        };
+
+        const timer = setTimeout(() => {
+          finishReject(new Error('Python WebAssembly 运行时加载超时（90 秒）。请检查网络/CDN 后刷新页面。'));
+        }, READY_TIMEOUT);
+
         this.worker.onmessage = event => {
           const msg = event.data || {};
           if (msg.kind === 'ready') {
-            clearTimeout(timer);
-            resolve();
+            finishResolve();
             return;
           }
           if (msg.kind === 'fatal') {
-            clearTimeout(timer);
-            reject(new Error(msg.error || 'Pyodide 加载失败'));
+            const detail = [msg.error, msg.stack].filter(Boolean).join('\n');
+            finishReject(new Error(detail || 'Pyodide 加载失败'));
             return;
           }
           if (msg.kind === 'result') {
@@ -58,18 +98,41 @@
             task.resolve(msg.result);
           }
         };
-        this.worker.onerror = event => reject(new Error(event.message || 'Python Worker 异常'));
+
+        this.worker.onerror = event => {
+          const where = event.filename
+            ? ` @ ${event.filename}:${event.lineno || 0}:${event.colno || 0}`
+            : '';
+          const detail = event.message || (event.error && event.error.message) || '模块 Worker 无法启动';
+          finishReject(new Error(`Python Worker 启动失败：${detail}${where}`));
+        };
+
+        this.worker.onmessageerror = () => {
+          finishReject(new Error('Python Worker 消息解析失败'));
+        };
       });
     }
 
     async call(action, code, input) {
-      await this.ready;
+      try {
+        await this.ready;
+      } catch (error) {
+        return runtimeFailure(error);
+      }
+
       const id = 'run-' + Date.now() + '-' + Math.random().toString(36).slice(2);
       return new Promise(resolve => {
         const timer = setTimeout(() => {
           this.pending.delete(id);
           this.spawn();
-          resolve({ ok: false, phase: 'run', timedOut: true, stdout: '', stderr: '', error: '运行超时' });
+          resolve({
+            ok: false,
+            phase: 'run',
+            timedOut: true,
+            stdout: '',
+            stderr: '',
+            error: '运行超时，Worker 已销毁并重建',
+          });
         }, RUN_TIMEOUT);
         this.pending.set(id, { resolve, timer });
         this.worker.postMessage({ id, action, code, input: input || '' });
@@ -101,14 +164,14 @@
     }
     if (action === 'check') return runner().call('check', payload.code, '');
     if (action === 'run') return runner().call('run', payload.code, payload.input || '');
-    if (action !== 'judge') return { ok: false, error: '未知操作' };
+    if (action !== 'judge') return { ok: false, phase: 'runtime', error: '未知操作' };
 
     if (payload.mode !== 'acm') {
       return { ok: false, phase: 'runtime', error: '浏览器安全模式当前只执行 Python ACM；核心代码模式请使用完整 Judge / Codespaces。' };
     }
 
     const cases = (payload.tests && payload.tests.acm) || [];
-    if (!cases.length) return { ok: false, error: '该题暂无 ACM 测试用例' };
+    if (!cases.length) return { ok: false, phase: 'runtime', error: '该题暂无 ACM 测试用例' };
 
     const results = [];
     for (let i = 0; i < cases.length; i++) {
@@ -127,6 +190,10 @@
         timedOut: !!r.timedOut,
         error: ok ? '' : (r.error || r.stderr || (r.ok ? '输出不一致' : '运行失败')),
       });
+
+      if (r.phase === 'runtime') {
+        return { ...r, results, passed: 0, total: cases.length, allPassed: false };
+      }
     }
     const passed = results.filter(x => x.ok).length;
     return { ok: true, passed, total: results.length, allPassed: passed === results.length, results };
@@ -141,6 +208,9 @@
     },
     warmup() {
       if (mode === 'browser') runner().ready.catch(() => {});
+    },
+    resetPython() {
+      if (py) py.spawn();
     },
   };
 })(window);
