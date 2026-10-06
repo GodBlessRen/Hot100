@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'">
+  <title>Hot100 Runtime Health</title>
+</head>
+<body>HOT100_RUNTIME_STARTING
+<script src="./runtime.js"></script>
+<script>
+(async () => {
+  try {
+    const result = await Hot100Runtime.request('run', {
+      language: 'python3',
+      code: "print('HOT100_RUNTIME_OK')",
+      input: ''
+    });
+    if (result && result.ok && String(result.stdout || '').trim() === 'HOT100_RUNTIME_OK') {
+      document.body.textContent = 'HOT100_RUNTIME_OK';
+    } else {
+      document.body.textContent = 'HOT100_RUNTIME_FAIL ' + JSON.stringify(result);
+    }
+  } catch (error) {
+    document.body.textContent = 'HOT100_RUNTIME_THROW ' + (error && error.stack || error && error.message || String(error));
+  }
+})();
+</script>
+</body>
+</html>
