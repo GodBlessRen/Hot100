@@ -44,4 +44,25 @@ jobs:
         run: node scripts/verify-parts.js all
 
       - name: 前端语法检查
-        run: node --check public/app.js && node --check public/runtime.js && node --check server.js
+        run: node --check public/app.js && node --check public/runtime.js && node --check public/pyodide-worker.js && node --check server.js
+
+      - name: 浏览器 Python Worker Smoke Test
+        run: |
+          python3 -m http.server 8000 --directory public >/tmp/hot100-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          sleep 1
+          BROWSER="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$BROWSER" ]; then
+            echo "No Chrome/Chromium found on runner"
+            exit 1
+          fi
+          timeout 100s "$BROWSER"             --headless=new --no-sandbox --disable-gpu             --virtual-time-budget=90000             --dump-dom "http://127.0.0.1:8000/__health.html?runtime=browser"             > /tmp/hot100-health.html 2>/tmp/hot100-chrome.log || true
+          cat /tmp/hot100-health.html
+          if ! grep -q "HOT100_RUNTIME_OK" /tmp/hot100-health.html; then
+            echo "==== Chrome log ===="
+            cat /tmp/hot100-chrome.log
+            echo "==== HTTP log ===="
+            cat /tmp/hot100-http.log
+            exit 1
+          fi
