@@ -20,9 +20,13 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: 准备自托管 Pyodide Core
+        run: bash scripts/prepare-pyodide.sh
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -38,7 +42,6 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-
       - name: Verify deployed Python runtime in real browser
         run: |
           BASE="${{ steps.deployment.outputs.page_url }}"
@@ -49,8 +52,8 @@ jobs:
           fi
           OK=0
           for attempt in 1 2 3; do
-            echo "Smoke attempt $attempt: ${BASE}__health.html?runtime=browser"
-            timeout 100s "$BROWSER"               --headless=new --no-sandbox --disable-gpu               --virtual-time-budget=90000               --dump-dom "${BASE}__health.html?runtime=browser"               > /tmp/hot100-pages-health.html 2>/tmp/hot100-pages-chrome.log || true
+            echo "Smoke attempt $attempt: ${BASE}__health.html?runtime=browser&smoke=1"
+            timeout 120s "$BROWSER"               --headless=new --no-sandbox --disable-gpu               --virtual-time-budget=120000               --dump-dom "${BASE}__health.html?runtime=browser&smoke=1"               > /tmp/hot100-pages-health.html 2>/tmp/hot100-pages-chrome.log || true
             if grep -q "HOT100_RUNTIME_OK" /tmp/hot100-pages-health.html; then
               OK=1
               break

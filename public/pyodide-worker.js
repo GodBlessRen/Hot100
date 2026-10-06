@@ -1,5 +1,6 @@
-const PYODIDE_BASE = 'https://cdn.jsdelivr.net/pyodide/v314.0.7/full/';
-const PYODIDE_MODULE = PYODIDE_BASE + 'pyodide.mjs';
+const CDN_BASE = 'https://cdn.jsdelivr.net/pyodide/v314.0.7/full/';
+const LOCAL_BASE = new URL('./vendor/pyodide/', self.location.href).href;
+const LOCAL_ONLY = new URL(self.location.href).searchParams.get('localOnly') === '1';
 const MAX_OUTPUT = 64 * 1024;
 
 function serializeError(error) {
@@ -7,6 +8,14 @@ function serializeError(error) {
     error: String(error && error.message || error || '未知错误'),
     stack: String(error && error.stack || ''),
   };
+}
+
+async function loadRuntime(base) {
+  const { loadPyodide } = await import(base + 'pyodide.mjs');
+  return loadPyodide({
+    indexURL: base,
+    packageBaseUrl: CDN_BASE,
+  });
 }
 
 function lockNetwork() {
@@ -54,15 +63,30 @@ const WRAPPER = [
 let pyodide = null;
 
 async function boot() {
+  let localError = null;
   try {
-    // 动态 import 的关键价值：CDN/CORS/模块加载失败时，我们仍能把真实错误回传主线程。
-    const { loadPyodide } = await import(PYODIDE_MODULE);
-    pyodide = await loadPyodide({ indexURL: PYODIDE_BASE });
-    lockNetwork();
-    self.postMessage({ kind: 'ready', version: pyodide.version });
+    pyodide = await loadRuntime(LOCAL_BASE);
   } catch (error) {
-    self.postMessage({ kind: 'fatal', ...serializeError(error) });
+    localError = error;
+    if (LOCAL_ONLY) {
+      self.postMessage({ kind: 'fatal', ...serializeError(error) });
+      return;
+    }
+    try {
+      pyodide = await loadRuntime(CDN_BASE);
+    } catch (cdnError) {
+      const combined = new Error(
+        '本地 Pyodide 与 CDN 兜底均加载失败。\n' +
+        'Local: ' + String(localError && localError.message || localError) + '\n' +
+        'CDN: ' + String(cdnError && cdnError.message || cdnError)
+      );
+      self.postMessage({ kind: 'fatal', ...serializeError(combined) });
+      return;
+    }
   }
+
+  lockNetwork();
+  self.postMessage({ kind: 'ready', version: pyodide.version, source: localError ? 'cdn' : 'local' });
 }
 
 boot();

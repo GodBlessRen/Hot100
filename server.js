@@ -56,6 +56,26 @@ function sendJson(res, status, data) {
   res.end(JSON.stringify(data));
 }
 
+function requestHostname(req) {
+  const raw = String(req.headers.host || '');
+  if (!raw) return '';
+  try { return new URL(`http://${raw}`).hostname.toLowerCase(); }
+  catch (_) { return ''; }
+}
+
+function allowedHost(req) {
+  const host = requestHostname(req);
+  if (!host) return false;
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true;
+  if (host.endsWith('.app.github.dev')) return true;
+
+  const extra = String(process.env.ALLOWED_HOSTS || '')
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  return extra.includes(host);
+}
+
 function sameOrigin(req) {
   const origin = req.headers.origin;
   if (!origin) return true;
@@ -69,15 +89,31 @@ function isComputeApi(url) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
+    let bytes = 0;
+    let done = false;
+
+    const fail = (error) => {
+      if (done) return;
+      done = true;
+      reject(error);
+    };
+
     req.on('data', (chunk) => {
-      body += chunk;
-      if (body.length > MAX_BODY) {
-        reject(new Error('请求体过大'));
+      if (done) return;
+      bytes += chunk.length;
+      if (bytes > MAX_BODY) {
+        fail(new Error('请求体过大'));
         req.destroy();
+        return;
       }
+      body += chunk.toString('utf8');
     });
-    req.on('end', () => resolve(body));
-    req.on('error', reject);
+    req.on('end', () => {
+      if (done) return;
+      done = true;
+      resolve(body);
+    });
+    req.on('error', fail);
   });
 }
 
@@ -177,6 +213,9 @@ async function handleApi(req, res, body) {
 }
 
 const server = http.createServer(async (req, res) => {
+  if (!allowedHost(req)) {
+    return sendJson(res, 403, { ok: false, error: 'Host 不在允许列表' });
+  }
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`).pathname;
   if (url.startsWith('/api/')) {
     if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'API 仅接受 POST 请求' });

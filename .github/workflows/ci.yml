@@ -33,18 +33,18 @@ jobs:
             const missP = p.filter(x => !x.core || !x.explain);
             const missT = p.filter(x => !t[x.id] || !t[x.id].acm || !t[x.id].core);
             const missS = p.filter(x => !s[x.id] || !s[x.id].python3 || !s[x.id].cpp);
-            if (missP.length || missT.length || missS.length) {
-              console.error('数据不完整', missP.map(x=>x.id), missT.map(x=>x.id), missS.map(x=>x.id));
+            if (p.length !== 100 || missP.length || missT.length || missS.length) {
+              console.error('数据不完整', p.length, missP.map(x=>x.id), missT.map(x=>x.id), missS.map(x=>x.id));
               process.exit(1);
             }
             console.log('✅ 100 题数据完整（core/explain/测试用例/题解）');
           "
 
-      - name: 全量题解验证（100 题 × ACM/核心 × Python3/C++，真实编译运行）
-        run: node scripts/verify-parts.js all
-
       - name: 前端语法检查
         run: node --check public/app.js && node --check public/runtime.js && node --check public/pyodide-worker.js && node --check server.js
+
+      - name: 准备自托管 Pyodide Core
+        run: bash scripts/prepare-pyodide.sh
 
       - name: 浏览器 Python Worker Smoke Test
         run: |
@@ -57,7 +57,7 @@ jobs:
             echo "No Chrome/Chromium found on runner"
             exit 1
           fi
-          timeout 100s "$BROWSER"             --headless=new --no-sandbox --disable-gpu             --virtual-time-budget=90000             --dump-dom "http://127.0.0.1:8000/__health.html?runtime=browser"             > /tmp/hot100-health.html 2>/tmp/hot100-chrome.log || true
+          timeout 120s "$BROWSER"             --headless=new --no-sandbox --disable-gpu             --virtual-time-budget=120000             --dump-dom "http://127.0.0.1:8000/__health.html?runtime=browser&smoke=1"             > /tmp/hot100-health.html 2>/tmp/hot100-chrome.log || true
           cat /tmp/hot100-health.html
           if ! grep -q "HOT100_RUNTIME_OK" /tmp/hot100-health.html; then
             echo "==== Chrome log ===="
@@ -66,3 +66,6 @@ jobs:
             cat /tmp/hot100-http.log
             exit 1
           fi
+
+      - name: 全量题解验证（100 题 × ACM/核心 × Python3/C++，真实编译运行）
+        run: node scripts/verify-parts.js all

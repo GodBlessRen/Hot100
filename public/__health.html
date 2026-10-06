@@ -11,18 +11,29 @@
 <script>
 (async () => {
   try {
+    const [problems, tests, solutions] = await Promise.all([
+      fetch('./data/problems.json').then(r => r.json()),
+      fetch('./data/tests.json').then(r => r.json()),
+      fetch('./data/solutions.json').then(r => r.json()),
+    ]);
+    if (!Array.isArray(problems) || problems.length !== 100 || !tests || !solutions) {
+      throw new Error('DATA_HEALTH_FAILED');
+    }
+
     const result = await Hot100Runtime.request('run', {
       language: 'python3',
+      mode: 'acm',
       code: "print('HOT100_RUNTIME_OK')",
       input: ''
     });
-    if (result && result.ok && String(result.stdout || '').trim() === 'HOT100_RUNTIME_OK') {
-      document.body.textContent = 'HOT100_RUNTIME_OK';
-    } else {
-      document.body.textContent = 'HOT100_RUNTIME_FAIL ' + JSON.stringify(result);
-    }
+
+    document.body.textContent =
+      result && result.ok && String(result.stdout || '').trim() === 'HOT100_RUNTIME_OK'
+        ? 'HOT100_RUNTIME_OK'
+        : 'HOT100_RUNTIME_FAIL ' + JSON.stringify(result);
   } catch (error) {
-    document.body.textContent = 'HOT100_RUNTIME_THROW ' + (error && error.stack || error && error.message || String(error));
+    document.body.textContent = 'HOT100_RUNTIME_THROW ' +
+      (error && error.stack || error && error.message || String(error));
   }
 })();
 </script>

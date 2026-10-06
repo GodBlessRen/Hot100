@@ -461,7 +461,7 @@ function describeFailure(result) {
 
 async function checkCode({ silent = false } = {}) {
   if (!editor) return;
-  if (!Hot100Runtime.canExecute(state.language)) {
+  if (!Hot100Runtime.canExecute(state.language, state.mode)) {
     if (!silent) setDiagnostic('浏览器安全模式', 'C/C++ 请使用完整 Judge（GitHub Codespaces）。', 'clean');
     return { ok: false, error: '当前静态模式不执行该语言' };
   }
@@ -488,7 +488,7 @@ async function checkCode({ silent = false } = {}) {
 
 function scheduleCheck() {
   clearTimeout(state.checkTimer);
-  if (!Hot100Runtime.canExecute(state.language)) {
+  if (!Hot100Runtime.canExecute(state.language, state.mode)) {
     setDiagnostic('浏览器安全模式', 'C/C++ 的编译与评测请打开完整 Judge（GitHub Codespaces）。', 'clean');
     return;
   }
@@ -500,7 +500,7 @@ function scheduleCheck() {
 
 async function runSample() {
   if (!editor || state.judging) return;
-  if (!Hot100Runtime.canExecute(state.language)) {
+  if (!Hot100Runtime.canExecute(state.language, state.mode)) {
     setDiagnostic('浏览器安全模式', 'C/C++ 请使用完整 Judge（GitHub Codespaces）。', 'clean');
     return;
   }
@@ -551,7 +551,7 @@ function normalizeOutput(value) {
 
 async function judge() {
   if (!editor || state.judging) return;
-  if (!Hot100Runtime.canExecute(state.language)) {
+  if (!Hot100Runtime.canExecute(state.language, state.mode)) {
     setDiagnostic('浏览器安全模式', 'C/C++ 请使用完整 Judge（GitHub Codespaces）。', 'clean');
     return;
   }
@@ -865,7 +865,7 @@ function renderLanguageTabs() {
 
 function renderRuntimeState() {
   const browserMode = Hot100Runtime.isBrowserMode;
-  const executable = Hot100Runtime.canExecute(state.language);
+  const executable = Hot100Runtime.canExecute(state.language, state.mode);
   const badge = $('runtimeBadge');
   const text = $('runtimeText');
   const link = $('codespacesLink');
@@ -875,9 +875,11 @@ function renderRuntimeState() {
   }
   if (text) {
     text.textContent = browserMode
-      ? (executable
-        ? 'Python 在独立 Web Worker / WebAssembly 中执行，不接触你的电脑文件。'
-        : 'C/C++ 在静态网页中不执行；使用私有 Codespace 完整评测。')
+      ? (state.mode !== 'acm'
+        ? '核心代码模式需要完整 Judge；请使用私有 Codespace。'
+        : executable
+          ? 'Python ACM 在独立 Web Worker / WebAssembly 中执行，不接触你的电脑文件。'
+          : 'C/C++ 在静态网页中不执行；使用私有 Codespace 完整评测。')
       : '完整评测运行在当前环境；请只执行你信任的代码。';
   }
   if (link) link.hidden = !browserMode;
