@@ -478,7 +478,7 @@ async function checkCode({ silent = false } = {}) {
     if (result.ok) setDiagnostic('语法通过', state.mode === 'core'
       ? '核心代码语法检查通过（函数/类签名合法）。'
       : '未发现语法或编译错误。', 'ok');
-    else setDiagnostic(result.phase === 'compile' ? '编译错误' : '语法错误', describeFailure(result), 'bad');
+    else setDiagnostic(result.phase === 'runtime' ? '运行环境错误' : result.phase === 'compile' ? '编译错误' : '语法错误', describeFailure(result), 'bad');
     return result;
   } catch (error) {
     if (seq === state.checkSeq) setDiagnostic('检查失败', error.message, 'bad');
