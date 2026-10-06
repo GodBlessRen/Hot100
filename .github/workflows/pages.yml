@@ -37,3 +37,29 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+
+
+      - name: Verify deployed Python runtime in real browser
+        run: |
+          BASE="${{ steps.deployment.outputs.page_url }}"
+          BROWSER="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$BROWSER" ]; then
+            echo "No Chrome/Chromium found on runner"
+            exit 1
+          fi
+          OK=0
+          for attempt in 1 2 3; do
+            echo "Smoke attempt $attempt: ${BASE}__health.html?runtime=browser"
+            timeout 100s "$BROWSER"               --headless=new --no-sandbox --disable-gpu               --virtual-time-budget=90000               --dump-dom "${BASE}__health.html?runtime=browser"               > /tmp/hot100-pages-health.html 2>/tmp/hot100-pages-chrome.log || true
+            if grep -q "HOT100_RUNTIME_OK" /tmp/hot100-pages-health.html; then
+              OK=1
+              break
+            fi
+            cat /tmp/hot100-pages-health.html || true
+            sleep 5
+          done
+          if [ "$OK" -ne 1 ]; then
+            echo "==== Chrome log ===="
+            cat /tmp/hot100-pages-chrome.log || true
+            exit 1
+          fi
